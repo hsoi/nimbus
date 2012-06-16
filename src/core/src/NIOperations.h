@@ -45,16 +45,16 @@
  */
 @interface NIOperation : NSOperation
 
-@property (readwrite, assign) id<NIOperationDelegate> delegate;
-@property (readonly, retain) NSError* lastError;
-@property (readwrite, assign) NSInteger tag;
+@property (nonatomic, readwrite, assign) id<NIOperationDelegate> delegate;
+@property (nonatomic, readonly, retain) NSError* lastError;
+@property (nonatomic, readwrite, assign) NSInteger tag;
 
 #if NS_BLOCKS_AVAILABLE
 
-@property (readwrite, copy) NIBasicBlock didStartBlock;
-@property (readwrite, copy) NIBasicBlock didFinishBlock;
-@property (readwrite, copy) NIErrorBlock didFailWithErrorBlock;
-@property (readwrite, copy) NIBasicBlock willFinishBlock;
+@property (nonatomic, readwrite, copy) NIBasicBlock didStartBlock;
+@property (nonatomic, readwrite, copy) NIBasicBlock didFinishBlock;
+@property (nonatomic, readwrite, copy) NIErrorBlock didFailWithErrorBlock;
+@property (nonatomic, readwrite, copy) NIBasicBlock willFinishBlock;
 
 #endif // #if NS_BLOCKS_AVAILABLE
 
@@ -79,11 +79,11 @@
 // Designated initializer.
 - (id)initWithURL:(NSURL *)url;
 
-@property (readwrite, copy) NSURL* url;
-@property (readwrite, assign) NSTimeInterval timeout; // Default: 60
-@property (readwrite, assign) NSURLRequestCachePolicy cachePolicy; // Default: NSURLRequestUseProtocolCachePolicy
-@property (readonly, retain) NSData* data;
-@property (readwrite, retain) id processedObject;
+@property (nonatomic, readwrite, copy) NSURL* url;
+@property (nonatomic, readwrite, assign) NSTimeInterval timeout; // Default: 60
+@property (nonatomic, readwrite, assign) NSURLRequestCachePolicy cachePolicy; // Default: NSURLRequestUseProtocolCachePolicy
+@property (nonatomic, readonly, retain) NSData* data;
+@property (nonatomic, readwrite, retain) id processedObject;
 
 @end
 

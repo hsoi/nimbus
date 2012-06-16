@@ -95,7 +95,7 @@ static NSMutableArray* sAppearanceStack = nil;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 + (NSInteger)count {
-  return [sAppearanceStack count];
+  return (NSInteger)[sAppearanceStack count];
 }
 
 
