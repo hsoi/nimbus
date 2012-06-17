@@ -16,8 +16,9 @@
 
 #import "CatalogViewController.h"
 
-#import "HelloWorldAttributedLabelViewController.h"
+#import "BasicInstantiationAttributedLabelViewController.h"
 #import "CustomTextAttributedLabelViewController.h"
+#import "LinksAttributedLabelViewController.h"
 
 //
 // What's going on in this file:
@@ -88,7 +89,7 @@
 
       // NIPushControllerAction is a helper method that instantiates the controller class and then
       // pushes it onto the current view controller's navigation stack.
-      NIPushControllerAction([HelloWorldAttributedLabelViewController class])
+      NIPushControllerAction([BasicInstantiationAttributedLabelViewController class])
 
       // A subtitle cell object will eventually display a NITextCell in the table view. A NITextCell
       // is a simple UITableViewCell built to work with Nimbus' cell architecture.
@@ -100,6 +101,11 @@
                              toObject:
       [NISubtitleCellObject objectWithTitle:@"Customizing Text"
                                    subtitle:@"How to use NSAttributedString"]],
+     [_actions attachNavigationAction:
+      NIPushControllerAction([LinksAttributedLabelViewController class])
+                             toObject:
+      [NISubtitleCellObject objectWithTitle:@"Links"
+                                   subtitle:@"Automatic and explicit links"]],
      nil];
 
     // When we create the model we must provide it with a delegate that implements the

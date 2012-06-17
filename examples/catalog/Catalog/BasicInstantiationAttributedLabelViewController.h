@@ -17,5 +17,5 @@
 #import <UIKit/UIKit.h>
 
 // All docs are in the .m.
-@interface CustomTextAttributedLabelViewController : UIViewController
+@interface BasicInstantiationAttributedLabelViewController : UIViewController
 @end

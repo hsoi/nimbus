@@ -16,6 +16,6 @@
 
 #import <UIKit/UIKit.h>
 
-// All docs found in the .m.
-@interface HelloWorldAttributedLabelViewController : UIViewController
+// All docs are in the .m.
+@interface LinksAttributedLabelViewController : UIViewController
 @end
