@@ -45,16 +45,16 @@
  */
 @interface NIOperation : NSOperation
 
-@property (nonatomic, readwrite, assign) id<NIOperationDelegate> delegate;
-@property (nonatomic, readonly, retain) NSError* lastError;
-@property (nonatomic, readwrite, assign) NSInteger tag;
+@property (readwrite, assign) id<NIOperationDelegate> delegate;
+@property (readonly, retain) NSError* lastError;
+@property (readwrite, assign) NSInteger tag;
 
 #if NS_BLOCKS_AVAILABLE
 
-@property (nonatomic, readwrite, copy) NIBasicBlock didStartBlock;
-@property (nonatomic, readwrite, copy) NIBasicBlock didFinishBlock;
-@property (nonatomic, readwrite, copy) NIErrorBlock didFailWithErrorBlock;
-@property (nonatomic, readwrite, copy) NIBasicBlock willFinishBlock;
+@property (readwrite, copy) NIBasicBlock didStartBlock;
+@property (readwrite, copy) NIBasicBlock didFinishBlock;
+@property (readwrite, copy) NIErrorBlock didFailWithErrorBlock;
+@property (readwrite, copy) NIBasicBlock willFinishBlock;
 
 #endif // #if NS_BLOCKS_AVAILABLE
 
@@ -62,28 +62,6 @@
 - (void)didFinish;
 - (void)didFailWithError:(NSError *)error;
 - (void)willFinish;
-
-@end
-
-/**
- * An operation that makes a network request.
- *
- * Provides asynchronous network request support when added to an NSOperationQueue.
- *
- * If the url provided is a file url, then the file will be loaded from disk instead.
- *
- *      @ingroup Operations
- */
-@interface NINetworkRequestOperation : NIOperation
-
-// Designated initializer.
-- (id)initWithURL:(NSURL *)url;
-
-@property (nonatomic, readwrite, copy) NSURL* url;
-@property (nonatomic, readwrite, assign) NSTimeInterval timeout; // Default: 60
-@property (nonatomic, readwrite, assign) NSURLRequestCachePolicy cachePolicy; // Default: NSURLRequestUseProtocolCachePolicy
-@property (nonatomic, readonly, retain) NSData* data;
-@property (nonatomic, readwrite, retain) id processedObject;
 
 @end
 
@@ -230,57 +208,4 @@
  * In the operation's thread, notify the delegate that the operation will finish successfully.
  *
  *      @fn NIOperation::willFinish
- */
-
-
-// NINetworkRequestOperation
-
-/** @name Creating an Operation */
-
-/**
- * Initializes a newly allocated network operation with a given url.
- *
- *      @fn NINetworkRequestOperation::initWithURL:
- */
-
-
-/** @name Configuring the Operation */
-
-/**
- * The url that will be loaded in the network operation.
- *
- *      @fn NINetworkRequestOperation::url
- */
-
-/**
- * The number of seconds that may pass before a request gives up and fails.
- *
- *      @fn NINetworkRequestOperation::timeout
- */
-
-/**
- * The request cache policy to use.
- *
- *      @fn NINetworkRequestOperation::cachePolicy
- */
-
-
-/** @name Operation Results */
-
-/**
- * The data received from the request.
- *
- * Will be nil if the request failed.
- *
- *      @sa NIOperation::lastError
- *      @fn NINetworkRequestOperation::data
- */
-
-/**
- * An object created from the data that was fetched.
- *
- * Will be nil if the request failed.
- *
- *      @sa NIOperation::lastError
- *      @fn NINetworkRequestOperation::processedObject
  */

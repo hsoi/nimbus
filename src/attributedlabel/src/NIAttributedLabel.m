@@ -23,6 +23,7 @@
 @interface NIAttributedLabel()
 @property (nonatomic, readwrite, retain) NSMutableAttributedString* mutableAttributedString;
 @property (nonatomic, readwrite, assign) CTFrameRef textFrame;
+@property (readwrite, assign) BOOL detectingLinks; // Atomic.
 @property (nonatomic, readwrite, assign) BOOL linksHaveBeenDetected;
 @property (nonatomic, readwrite, copy) NSArray* detectedlinkLocations;
 @property (nonatomic, readwrite, retain) NSMutableArray* explicitLinkLocations;
@@ -44,20 +45,25 @@
 
 @synthesize mutableAttributedString = _mutableAttributedString;
 @synthesize textFrame = _textFrame;
+@synthesize detectingLinks = _detectingLinks;
 @synthesize linksHaveBeenDetected = _linksHaveBeenDetected;
 @synthesize detectedlinkLocations = _detectedlinkLocations;
 @synthesize explicitLinkLocations = _explicitLinkLocations;
 @synthesize touchedLink = _touchedLink;
 @synthesize autoDetectLinks = _autoDetectLinks;
-@synthesize dataTypes = _dataTypes;
+@synthesize deferLinkDetection = _deferLinkDetection;
+@synthesize dataDetectorTypes = _dataDetectorTypes;
+@synthesize verticalTextAlignment = _verticalTextAlignment;
 @synthesize underlineStyle = _underlineStyle;
 @synthesize underlineStyleModifier = _underlineStyleModifier;
+@synthesize shadowBlur;
 @synthesize strokeWidth = _strokeWidth;
 @synthesize strokeColor = _strokeColor;
 @synthesize textKern = _textKern;
 @synthesize linkColor = _linkColor;
 @synthesize highlightedLinkColor = _highlightedLinkColor;
 @synthesize linksHaveUnderlines = _linksHaveUnderlines;
+@synthesize attributesForLinks = _attributesForLinks;
 @synthesize delegate = _delegate;
 
 
@@ -70,11 +76,18 @@
 
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
+- (void)_configureDefaults {
+  self.verticalTextAlignment = NIVerticalTextAlignmentTop;
+  self.linkColor = [UIColor blueColor];
+  self.dataDetectorTypes = NSTextCheckingTypeLink;
+  self.highlightedLinkColor = [UIColor colorWithWhite:0.5f alpha:0.5f];
+}
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
 - (id)initWithFrame:(CGRect)frame {
   if ((self = [super initWithFrame:frame])) {
-    self.linkColor = [UIColor blueColor];
-    self.dataTypes = NSTextCheckingTypeLink;
-    self.highlightedLinkColor = [UIColor colorWithWhite:0.5f alpha:0.5f];
+    [self _configureDefaults];
   }
   return self;
 }
@@ -83,6 +96,8 @@
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 - (void)awakeFromNib {
   [super awakeFromNib];
+  
+  [self _configureDefaults];
 
   self.attributedString = [self.class mutableAttributedStringFromLabel:self];
 }
@@ -389,6 +404,38 @@
 
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
+- (NSArray *)_matchesFromAttributedString:(NSString *)string {
+  NSError* error = nil;
+  NSDataDetector* linkDetector = [NSDataDetector dataDetectorWithTypes:self.dataDetectorTypes
+                                                                 error:&error];
+  NSRange range = NSMakeRange(0, string.length);
+  
+  return [linkDetector matchesInString:string options:0 range:range];
+}
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+- (void)_deferLinkDetection {
+  if (!self.detectingLinks) {
+    self.detectingLinks = YES;
+
+    NSString* string = [self.mutableAttributedString.string copy];
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+      NSArray* matches = [self _matchesFromAttributedString:string];
+      self.detectingLinks = NO;
+
+      dispatch_async(dispatch_get_main_queue(), ^{
+        self.detectedlinkLocations = matches;
+        self.linksHaveBeenDetected = YES;
+
+        [self attributedTextDidChange];
+      });
+    });
+  }
+}
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
 // Use an NSDataDetector to find any implicit links in the text. The results are cached until
 // the text changes.
 - (void)detectLinks {
@@ -397,14 +444,13 @@
   }
 
   if (self.autoDetectLinks && !self.linksHaveBeenDetected) {
-    NSError* error = nil;
-    NSDataDetector* linkDetector = [NSDataDetector dataDetectorWithTypes:self.dataTypes
-                                                                   error:&error];
-    NSString* string = self.mutableAttributedString.string;
-    NSRange range = NSMakeRange(0, string.length);
+    if (self.deferLinkDetection) {
+      [self _deferLinkDetection];
 
-    self.detectedlinkLocations = [linkDetector matchesInString:string options:0 range:range];
-    self.linksHaveBeenDetected = YES;
+    } else {
+      self.detectedlinkLocations = [self _matchesFromAttributedString:self.mutableAttributedString.string];
+      self.linksHaveBeenDetected = YES;
+    }
   }
 }
 
@@ -450,6 +496,33 @@
 
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
+- (CGFloat)_verticalOffsetForBounds:(CGRect)bounds {
+  CGFloat verticalOffset = 0;
+  if (NIVerticalTextAlignmentTop != self.verticalTextAlignment) {
+    // When the text is attached to the top we can easily just start drawing and leave the
+    // remainder. This is the most performant case.
+    // With other alignment modes we must calculate the size of the text first.
+    CGSize textSize = [self sizeThatFits:CGSizeMake(bounds.size.width, CGFLOAT_MAX)];
+
+    if (NIVerticalTextAlignmentMiddle == self.verticalTextAlignment) {
+      verticalOffset = floorf((bounds.size.height - textSize.height) / 2.f);
+      
+    } else if (NIVerticalTextAlignmentBottom == self.verticalTextAlignment) {
+      verticalOffset = bounds.size.height - textSize.height;
+    }
+  }
+  return verticalOffset;
+}
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+- (CGAffineTransform)_transformForCoreText {
+  // CoreText context coordinates are the opposite to UIKit so we flip the bounds
+  return CGAffineTransformScale(CGAffineTransformMakeTranslation(0, self.bounds.size.height), 1.f, -1.f);
+}
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
 - (NSTextCheckingResult *)linkAtPoint:(CGPoint)point {
   static const CGFloat kVMargin = 5.0f;
 	if (!CGRectContainsPoint(CGRectInset(self.bounds, 0, -kVMargin), point)) {
@@ -464,22 +537,20 @@
 
 	CGPoint origins[count];
 	CTFrameGetLineOrigins(self.textFrame, CFRangeMake(0,0), origins);
+  
+  CGAffineTransform transform = [self _transformForCoreText];
+  CGFloat verticalOffset = [self _verticalOffsetForBounds:self.bounds];
 
   for (int i = 0; i < count; i++) {
 		CGPoint linePoint = origins[i];
 
 		CTLineRef line = CFArrayGetValueAtIndex(lines, i);
 		CGRect flippedRect = [self getLineBounds:line point:linePoint];
-    CGRect bounds = CGRectMake(CGRectGetMinX(self.bounds),
-                               CGRectGetMaxY(self.bounds)-CGRectGetMaxY(self.bounds),
-                               CGRectGetWidth(self.bounds),
-                               CGRectGetHeight(self.bounds));
-    CGRect rect = CGRectMake(CGRectGetMinX(flippedRect),
-                             CGRectGetMaxY(bounds)-CGRectGetMaxY(flippedRect),
-                             CGRectGetWidth(flippedRect),
-                             CGRectGetHeight(flippedRect));                      
+    CGRect rect = CGRectApplyAffineTransform(flippedRect, transform);
 
 		rect = CGRectInset(rect, 0, -kVMargin);
+    rect = CGRectOffset(rect, 0, verticalOffset);
+
 		if (CGRectContainsPoint(rect, point)) {
 			CGPoint relativePoint = CGPointMake(point.x-CGRectGetMinX(rect),
                                           point.y-CGRectGetMinY(rect));
@@ -495,20 +566,9 @@
 
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
-- (UIView *)hitTest:(CGPoint)point withEvent:(UIEvent *)event {
-  UIView* view = [super hitTest:point withEvent:event];
-  if (view != self) {
-		return view;
-	}
-  if (nil == [self linkAtPoint:point]) {
-    return nil;
-  }
-  return view;
-}
-
-
-///////////////////////////////////////////////////////////////////////////////////////////////////
 - (void)touchesBegan:(NSSet *)touches withEvent:(UIEvent *)event {
+  [super touchesBegan:touches withEvent:event];
+
   UITouch* touch = [touches anyObject];
 	CGPoint point = [touch locationInView:self];
 
@@ -520,6 +580,8 @@
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 - (void)touchesEnded:(NSSet *)touches withEvent:(UIEvent *)event {
+  [super touchesEnded:touches withEvent:event];
+
   UITouch* touch = [touches anyObject];
 	CGPoint point = [touch locationInView:self];
 
@@ -542,9 +604,28 @@
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 - (void)touchesCancelled:(NSSet *)touches withEvent:(UIEvent *)event {
+  [super touchesCancelled:touches withEvent:event];
+
   self.touchedLink = nil;
 
   [self setNeedsDisplay];
+}
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+- (void)_applyLinkStyleWithResults:(NSArray *)results toAttributedString:(NSMutableAttributedString *)attributedString {
+  for (NSTextCheckingResult* result in results) {
+    [attributedString setTextColor:self.linkColor range:result.range];
+    if (self.linksHaveUnderlines) {
+      [attributedString setUnderlineStyle:kCTUnderlineStyleSingle
+                                 modifier:kCTUnderlinePatternSolid
+                                    range:result.range];
+    }
+
+    if (self.attributesForLinks.count > 0) {
+      [attributedString addAttributes:self.attributesForLinks range:result.range];
+    }
+  }
 }
 
 
@@ -556,24 +637,12 @@
 - (NSMutableAttributedString *)mutableAttributedStringWithLinkStylesApplied {
   NSMutableAttributedString* attributedString = [self.attributedString mutableCopy];
   if (self.autoDetectLinks) {
-    for (NSTextCheckingResult* result in self.detectedlinkLocations) {
-      [attributedString setTextColor:self.linkColor range:result.range];
-      if (self.linksHaveUnderlines) {
-        [attributedString setUnderlineStyle:kCTUnderlineStyleSingle
-                                   modifier:kCTUnderlinePatternSolid
-                                      range:result.range];
-      }
-    }
+    [self _applyLinkStyleWithResults:self.detectedlinkLocations
+                  toAttributedString:attributedString];
   }
 
-  for (NSTextCheckingResult* result in self.explicitLinkLocations) {
-    [attributedString setTextColor:self.linkColor range:result.range];
-    if (self.linksHaveUnderlines) {
-      [attributedString setUnderlineStyle:kCTUnderlineStyleSingle
-                                 modifier:kCTUnderlinePatternSolid
-                                    range:result.range];
-    }
-  }
+  [self _applyLinkStyleWithResults:self.explicitLinkLocations
+                toAttributedString:attributedString];
 
   return attributedString;
 }
@@ -581,6 +650,10 @@
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 - (void)drawTextInRect:(CGRect)rect {
+  if (NIVerticalTextAlignmentTop != self.verticalTextAlignment) {
+    rect.origin.y = [self _verticalOffsetForBounds:rect];
+  }
+
   if (self.autoDetectLinks) {
     [self detectLinks];
   }
@@ -594,17 +667,19 @@
     CGContextRef ctx = UIGraphicsGetCurrentContext();
 		CGContextSaveGState(ctx);
 
-    // CoreText context coordinates are the opposite to UIKit so we flip the bounds
-    CGContextConcatCTM(ctx, CGAffineTransformScale(CGAffineTransformMakeTranslation(0, self.bounds.size.height), 1.f, -1.f));
+    CGAffineTransform transform = [self _transformForCoreText];
+    CGContextConcatCTM(ctx, transform);
 
     if (nil == self.textFrame) {
       CFAttributedStringRef attributedString = (__bridge CFAttributedStringRef)attributedStringWithLinks;
       CTFramesetterRef framesetter = CTFramesetterCreateWithAttributedString(attributedString);
 
       CGMutablePathRef path = CGPathCreateMutable();
-			CGPathAddRect(path, NULL, self.bounds);
+      // We must tranform the path rectangle in order to draw the text correctly for bottom/middle
+      // vertical alignment modes.
+			CGPathAddRect(path, &transform, rect);
       if (nil != self.shadowColor) {
-        CGContextSetShadowWithColor(ctx, self.shadowOffset, 0, self.shadowColor.CGColor);
+        CGContextSetShadowWithColor(ctx, self.shadowOffset, self.shadowBlur, self.shadowColor.CGColor);
       }
       self.textFrame = CTFramesetterCreateFrame(framesetter, CFRangeMake(0, 0), path, NULL);
 			CGPathRelease(path);
@@ -679,6 +754,8 @@
         }
 
         if (!CGRectIsEmpty(highlightRect)) {
+          highlightRect = CGRectOffset(highlightRect, 0, -rect.origin.y);
+
           CGFloat pi = (CGFloat)M_PI;
 
           CGFloat radius = 5.0f;

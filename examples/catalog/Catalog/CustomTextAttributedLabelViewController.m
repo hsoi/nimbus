@@ -15,6 +15,7 @@
 //
 
 #import "CustomTextAttributedLabelViewController.h"
+#import "NimbusAttributedLabel.h"
 
 // This import is not included by NimbusAttributedLabel.h because it is a category and we want to
 // make it explicit that you are augmenting a class.
@@ -54,7 +55,7 @@
   [super viewDidLoad];
 
   NSString* string =
-  @"For years our hero has explored the dark horizon. "
+  @"For 20 years she has ventured into the dark horizon. "
   @"At long last, a planet grows in the distance. "
   @"\"Hello world!\" she exclaims.";
 

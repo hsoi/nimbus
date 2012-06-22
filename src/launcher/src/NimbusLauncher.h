@@ -15,9 +15,12 @@
 //
 
 /**
- * Nimbus' Launcher view and related components.
  * @defgroup NimbusLauncher Nimbus Launcher
  * @{
+ *
+ * <div id="github" feature="launcher"></div>
+ *
+ * Nimbus' Launcher view and related components.
  *
  * A launcher view is best exemplified in Apple's home screen interface. It consists of a set
  * of pages that each contain a set of buttons that the user may tap to access a consistent,
@@ -29,16 +32,7 @@
  *
  * @image html NILauncherViewControllerExample1.png "Example of an NILauncherViewController as seen in the BasicLauncher demo application."
  *
- */
-
-#import <Foundation/Foundation.h>
-#import <UIKit/UIKit.h>
-
-
-/**
- * The views and data containers used to display a launcher user interface.
- *
- * @defgroup Launcher-User-Interface User Interface
+ * <h2>Overview</h2>
  *
  * The Nimbus launcher is composed primarily of the NILauncherView and its
  * @link Launcher-Protocols protocols@endlink. The
@@ -55,12 +49,6 @@
  * data used to populate the launcher from the presentation. When we inevitably receive a low
  * memory warning on a view controller that's off screen, we can discard the launcher view and
  * be confident that we won't lose any state information.
- */
-
-/**
- * The delegate and data source protocols that allow the user interface to be simple.
- *
- * @defgroup Launcher-Protocols Protocols
  *
  * The launcher is related in spirit to UITableView in its use of protocols to remove much
  * of the heavy data and user interaction logic from the view itself. The NILauncherDelegate
@@ -68,6 +56,9 @@
  * state changes. The NILauncherDataSource protocol defines the set of optional and
  * required methods for populating the launcher with data.
  */
+
+#import <Foundation/Foundation.h>
+#import <UIKit/UIKit.h>
 
 // Dependencies
 #import "NimbusCore.h"

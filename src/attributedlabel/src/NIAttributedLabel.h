@@ -22,30 +22,28 @@
 #define UITextAlignmentJustify ((UITextAlignment)kCTJustifiedTextAlignment)
 #endif
 
+// Vertical alignments for NIAttributedLabel.
+typedef enum {
+  NIVerticalTextAlignmentTop = 0,
+  NIVerticalTextAlignmentMiddle,
+  NIVerticalTextAlignmentBottom,
+} NIVerticalTextAlignment;
+
 @protocol NIAttributedLabelDelegate;
 
 /**
  * A UILabel that utilizes NSAttributedString to format its text.
  *
- * A note on using lineBreakMode with NIAttributedLabel:
- * CoreText's line break mode functionality does not work the same way as UILabel.
+ * Differences between UILabel and NIAttributedLabel:
  *
- * UILabel: when you use truncation modes with multiline labels, the text will be treated as
- * one continuous string. The documentation for each UILineBreakMode value applies correctly to
- * UILabels.
- *
- * NIAttributedLabel: when you use truncation modes with multiline labels, the modes behave
- * differently:
- *
- * - UILineBreakModeWordWrap, UILineBreakModeCharacterWrap: wraps the text over multiple lines with
- *   no truncation.
- * - UILineBreakModeHeadTruncation, UILineBreakModeTailTruncation, UILineBreakModeMiddleTruncation:
- *   will only break the text onto a new line when a \n character is encountered. Each line is
- *   truncated with the line break mode.
- *
- * In short: if you want to use truncation with a multiline attributed label then you need to
- * manually wrap the lines by using \n characters. If you don't need truncation then you can use
- * the word wrap and character wrap modes to have the text automatically wrap.
+ * - UILineBreakModeHeadTruncation, UILineBreakModeTailTruncation, and
+ *   UILineBreakModeMiddleTruncation only apply to single lines and will not wrap the label
+ *   regardless of the numberOfLines property. To wrap liines with any of these line break modes
+ *   you must explicitly add \n characters to the string.
+ * - When you assign an NSString to the text property the attributed label will create an
+ *   attributed string that inherits all of the label's current styles.
+ * - Text is aligned vertically to the top of the bounds rather than centered. You can change this
+ *   using @link NIAttributedLabel::verticalTextAlignment verticalTextAlignment@endlink.
  *
  *      @ingroup NimbusAttributedLabel
  */
@@ -54,16 +52,21 @@
 @property (nonatomic, copy) NSAttributedString* attributedString;
 
 @property (nonatomic, assign) BOOL autoDetectLinks; // Default: NO
-@property (nonatomic, assign) NSTextCheckingType dataTypes; // Default: NSTextCheckingTypeLink
+@property (nonatomic, assign) NSTextCheckingType dataDetectorTypes; // Default: NSTextCheckingTypeLink
+@property (nonatomic, assign) BOOL deferLinkDetection; // Default: NO
+
 - (void)addLink:(NSURL *)urlLink range:(NSRange)range;
 - (void)removeAllExplicitLinks; // Removes all links that were added by addLink:range:. Does not remove autodetected links.
 
 @property (nonatomic, retain) UIColor* linkColor; // Default: [UIColor blueColor]
 @property (nonatomic, retain) UIColor* highlightedLinkColor; // Default: [UIColor colorWithWhite:0.5 alpha:0.5
 @property (nonatomic, assign) BOOL linksHaveUnderlines; // Default: NO
+@property (nonatomic, retain) NSDictionary *attributesForLinks; // Default: nil
 
+@property (nonatomic, assign) NIVerticalTextAlignment verticalTextAlignment; // Default: NIVerticalTextAlignmentTop
 @property (nonatomic, assign) CTUnderlineStyle underlineStyle;
 @property (nonatomic, assign) CTUnderlineStyleModifiers underlineStyleModifier;
+@property (nonatomic, assign) CGFloat shadowBlur; // Default: 0
 @property (nonatomic, assign) CGFloat strokeWidth;
 @property (nonatomic, retain) UIColor* strokeColor;
 @property (nonatomic, assign) CGFloat textKern;
@@ -72,7 +75,7 @@
 - (void)setFont:(UIFont *)font range:(NSRange)range;
 - (void)setUnderlineStyle:(CTUnderlineStyle)style modifier:(CTUnderlineStyleModifiers)modifier range:(NSRange)range;
 - (void)setStrokeWidth:(CGFloat)width range:(NSRange)range;
-- (void)setStrokeColor:(UIColor*)color range:(NSRange)range;
+- (void)setStrokeColor:(UIColor *)color range:(NSRange)range;
 - (void)setTextKern:(CGFloat)kern range:(NSRange)range;
 
 @property (nonatomic, assign) IBOutlet id<NIAttributedLabelDelegate> delegate;
@@ -81,7 +84,7 @@
 /**
  * The attributed label delegate used to inform of user interactions.
  *
- * @ingroup NimbusAttributedLabel-Protocol
+ * @ingroup NimbusAttributedLabel
  */
 @protocol NIAttributedLabelDelegate <NSObject>
 @optional
@@ -92,6 +95,8 @@
 - (void)attributedLabel:(NIAttributedLabel*)attributedLabel didSelectTextCheckingResult:(NSTextCheckingResult *)result atPoint:(CGPoint)point;
 
 @end
+
+/** @name Accessing the Text Attributes */
 
 /**
  * The attributed string that will be displayed.
@@ -106,17 +111,47 @@
  *      @fn NIAttributedLabel::attributedString
  */
 
+/** @name Accessing and Detecting Links */
+
 /**
  * Whether to automatically detect links in the string.
+ *
+ * By default this is disabled.
  *
  * Link detection is deferred until the label is displayed for the first time. If the text changes
  * then all of the links will be cleared and re-detected when the label displays again.
  *
+ * Note that link detection is an expensive operation. If you are planning to use attributed labels
+ * in table views or similar high-performance situations then you should consider enabling defered
+ * link detection by setting deferLinkDetection to YES.
+ *
+ *      @sa NIAttributedLabel::dataDetectorTypes
  *      @fn NIAttributedLabel::autoDetectLinks
  */
 
 /**
- * Adds a link at a given range.
+ * Whether to defer link detection to a separate thread.
+ *
+ * By default this is disabled.
+ *
+ * When defering is enabled, link detection will be performed on a separate thread. This will cause
+ * your label to appear without any links briefly before being redrawn with the detected links.
+ * This offloads the data detection to a separate thread so that your labels can be displayed
+ * faster.
+ *
+ *      @fn NIAttributedLabel::deferLinkDetection
+ */
+
+/**
+ * The types of data that will be detected when autoDetectLinks is enabled.
+ *
+ * By default this is NSTextCheckingTypeLink. <a href="https://developer.apple.com/library/mac/#documentation/AppKit/Reference/NSTextCheckingResult_Class/Reference/Reference.html#//apple_ref/doc/uid/TP40008798-CH1-DontLinkElementID_50">All available data detector types</a>.
+ *
+ *      @fn NIAttributedLabel::dataDetectorTypes
+ */
+
+/**
+ * Adds a link to a URL at a given range.
  *
  * Adding any links will immediately enable user interaction on this label. Explicitly added
  * links are removed whenever the text changes.
@@ -131,6 +166,8 @@
  *
  *      @fn NIAttributedLabel::removeAllExplicitLinks
  */
+
+/** @name Accessing Link Display Styles */
 
 /**
  * The color of detected links.
@@ -162,6 +199,29 @@
  */
 
 /**
+ * A dictionary of attributes to apply to links.
+ *
+ * This dictionary must contain CoreText properties. These attributes are applied after the color
+ * and link styles have been applied to the link.
+ *
+ *      @fn NIAttributedLabel::attributesForLinks
+ */
+
+/** @name Modifying Rich Text Styles for All Text */
+
+/**
+ * The vertical alignment of the text within the label's bounds.
+ *
+ * @c NIVerticalTextAlignmentBottom will align the text to the bottom of the bounds, while
+ * @c NIVerticalTextAlignmentMiddle will center the text vertically.
+ *
+ * The default is @c NIVerticalTextAlignmentTop. This is for performance reasons because the other
+ * modes require more computation and aligning to the top is generally what you want anyway.
+ *
+ *      @fn NIAttributedLabel::verticalTextAlignment
+ */
+
+/**
  * The underline style for the whole text.
  *
  * Value:
@@ -184,6 +244,15 @@
  * - kCTUnderlinePatternDashDotDot
  *
  *      @fn NIAttributedLabel::underlineStyleModifier
+ */
+
+/**
+ * A non-negative number specifying the amount of blur to apply to the label's shadow.
+ *
+ * By default this is zero. In practice this is often the desired amount of blurring to apply to a
+ * label shadow.
+ *
+ *      @fn NIAttributedLabel::shadowBlur
  */
 
 /**
@@ -213,6 +282,8 @@
  *      @fn NIAttributedLabel::textKern
  */
 
+/** @name Modifying Rich Text Styles in Ranges */
+
 /**
  * Sets the text color for a given range.
  *
@@ -225,8 +296,7 @@
 /** 
  * Sets the font for a given range.
  *
- * Note that this will not change the default font value and font will
- * return the default font.
+ * Note that this will not change the default font value and font will return the default font.
  *
  *      @fn NIAttributedLabel::setFont:range:
  */
@@ -237,12 +307,14 @@
  * Note that this will not change the default underline style.
  *
  * Style Values:
+ *
  * - kCTUnderlineStyleNone (default)
  * - kCTUnderlineStyleSingle
  * - kCTUnderlineStyleThick
  * - kCTUnderlineStyleDouble
  *
  * Modifier Values:
+ *
  * - kCTUnderlinePatternSolid (default)
  * - kCTUnderlinePatternDot
  * - kCTUnderlinePatternDash
@@ -255,9 +327,8 @@
 /**
  * Modifies the stroke width for a given range.
  *
- * A positive number will render only the stroke, whereas negivive a number are for stroke
- * and fill.
- * A width of 3.0 is a good starting point.
+ * A positive number will draw only the stroke.
+ * A negative number wlll draw the stroke and fill.
  *
  *      @fn NIAttributedLabel::setStrokeWidth:range:
  */
@@ -265,7 +336,7 @@
 /**
  * Modifies the stroke color for a given range.
  *
- * Normally you would use this in conjunction with setStrokeWidth:range: passing in the same
+ * Normally you would use this in conjunction with setStrokeWidth:range:, passing in the same
  * range for both.
  *
  *      @fn NIAttributedLabel::setStrokeColor:range:
@@ -282,6 +353,8 @@
  *
  *      @fn NIAttributedLabel::setTextKern:range:
  */
+
+/** @name Accessing the Delegate */
 
 /**
  * The attributed label notifies the delegate of any user interactions.
