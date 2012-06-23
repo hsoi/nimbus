@@ -45,16 +45,16 @@
  */
 @interface NIOperation : NSOperation
 
-@property (readwrite, assign) id<NIOperationDelegate> delegate;
-@property (readonly, retain) NSError* lastError;
-@property (readwrite, assign) NSInteger tag;
+@property (atomic, readwrite, assign) id<NIOperationDelegate> delegate;
+@property (atomic, readonly, retain) NSError* lastError;
+@property (atomic, readwrite, assign) NSInteger tag;
 
 #if NS_BLOCKS_AVAILABLE
 
-@property (readwrite, copy) NIBasicBlock didStartBlock;
-@property (readwrite, copy) NIBasicBlock didFinishBlock;
-@property (readwrite, copy) NIErrorBlock didFailWithErrorBlock;
-@property (readwrite, copy) NIBasicBlock willFinishBlock;
+@property (atomic, readwrite, copy) NIBasicBlock didStartBlock;
+@property (atomic, readwrite, copy) NIBasicBlock didFinishBlock;
+@property (atomic, readwrite, copy) NIErrorBlock didFailWithErrorBlock;
+@property (atomic, readwrite, copy) NIBasicBlock willFinishBlock;
 
 #endif // #if NS_BLOCKS_AVAILABLE
 
