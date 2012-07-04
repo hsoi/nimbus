@@ -22,6 +22,7 @@
 #import "LinksAttributedLabelViewController.h"
 #import "DataTypesAttributedLabelViewController.h"
 #import "PerformanceAttributedLabelViewController.h"
+#import "LongTapAttributedLabelViewController.h"
 #import "InterfaceBuilderAttributedLabelViewController.h"
 
 // Badge
@@ -32,9 +33,20 @@
 // Interapp
 #import "InterappViewController.h"
 
+// Launcher
+#import "BasicInstantiationLauncherViewController.h"
+#import "ModelLauncherViewController.h"
+#import "ModifyingLauncherViewController.h"
+#import "RestoringLauncherViewController.h"
+#import "BadgedLauncherViewController.h"
+
 // Network Image
 #import "BasicInstantiationNetworkImageViewController.h"
 #import "ContentModesNetworkImageViewController.h"
+
+// Paging Scroll View
+#import "BasicInstantiationPagingScrollViewController.h"
+#import "VerticalPagingScrollViewController.h"
 
 // Web Controller
 #import "ExtraActionsWebViewController.h"
@@ -142,6 +154,11 @@
       [NISubtitleCellObject objectWithTitle:@"Performance"
                                    subtitle:@"Speeding up attributed labels"]],
      [_actions attachNavigationAction:
+      NIPushControllerAction([LongTapAttributedLabelViewController class])
+                             toObject:
+      [NISubtitleCellObject objectWithTitle:@"Long Taps"
+                                   subtitle:@"Configuring long tap action sheets"]],
+     [_actions attachNavigationAction:
       NIPushControllerAction([InterfaceBuilderAttributedLabelViewController class])
                              toObject:
       [NISubtitleCellObject objectWithTitle:@"Interface Builder"
@@ -170,6 +187,33 @@
                              toObject:
       [NISubtitleCellObject objectWithTitle:@"All Actions"
                                    subtitle:@"A list of all available actions"]],
+     
+     @"Launcher",
+     [_actions attachNavigationAction:
+      NIPushControllerAction([BasicInstantiationLauncherViewController class])
+                             toObject:
+      [NISubtitleCellObject objectWithTitle:@"Basic Instantiation"
+                                   subtitle:@"How to subclass a launcher controller"]],
+     [_actions attachNavigationAction:
+      NIPushControllerAction([ModelLauncherViewController class])
+                             toObject:
+      [NISubtitleCellObject objectWithTitle:@"Model"
+                                   subtitle:@"Using a model to manage data"]],
+     [_actions attachNavigationAction:
+      NIPushControllerAction([ModifyingLauncherViewController class])
+                             toObject:
+      [NISubtitleCellObject objectWithTitle:@"Modifying"
+                                   subtitle:@"How to add new launcher buttons"]],
+     [_actions attachNavigationAction:
+      NIPushControllerAction([RestoringLauncherViewController class])
+                             toObject:
+      [NISubtitleCellObject objectWithTitle:@"Restoring"
+                                   subtitle:@"Saving and loading launcher data"]],
+     [_actions attachNavigationAction:
+      NIPushControllerAction([BadgedLauncherViewController class])
+                             toObject:
+      [NISubtitleCellObject objectWithTitle:@"Badges"
+                                   subtitle:@"Adding badges to launcher items"]],
 
      @"Network Image",
      [_actions attachNavigationAction:
@@ -183,10 +227,27 @@
       [NISubtitleCellObject objectWithTitle:@"Content Modes"
                                    subtitle:@"Effects of each content mode"]],
      
+     @"Paging Scroll Views",
+     [_actions attachNavigationAction:
+      NIPushControllerAction([BasicInstantiationPagingScrollViewController class])
+                             toObject:
+      [NISubtitleCellObject objectWithTitle:@"Basic Instantiation"
+                                   subtitle:@"How to create a paging scroll view"]],
+     [_actions attachNavigationAction:
+      NIPushControllerAction([VerticalPagingScrollViewController class])
+                             toObject:
+      [NISubtitleCellObject objectWithTitle:@"Vertical Paging"
+                                   subtitle:@"Using a vertical layout"]],
+
      @"Web Controller",
      [_actions attachNavigationAction:
-      NIPushControllerInstanceAction([[NIWebController alloc] initWithURL:[NSURL URLWithString:@"http://nimbuskit.info"]])
-                             toObject:
+      ^(id object, UIViewController* controller) {
+        NIWebController* webController = [[NIWebController alloc] initWithURL:[NSURL URLWithString:@"http://nimbuskit.info"]];
+        [controller.navigationController pushViewController:webController
+                                                   animated:YES];
+        
+        return NO;
+      } toObject:
       [NISubtitleCellObject objectWithTitle:@"Basic Instantiation"
                                    subtitle:@"How to create a simple NIWebController"]],
      [_actions attachNavigationAction:
@@ -210,8 +271,13 @@
       } toObject:[NISubtitleCellObject objectWithTitle:@"Tinting the Toolbar"
                                               subtitle:@"Tinting a web controller's toolbar"]],
      [_actions attachNavigationAction:
-      NIPushControllerInstanceAction([[ExtraActionsWebViewController alloc] initWithURL:[NSURL URLWithString:@"http://nimbuskit.info"]])
-                             toObject:
+      ^(id object, UIViewController* controller) {
+        NIWebController* webController = [[ExtraActionsWebViewController alloc] initWithURL:[NSURL URLWithString:@"http://nimbuskit.info"]];
+        [controller.navigationController pushViewController:webController
+                                                   animated:YES];
+        
+        return NO;
+      } toObject:
       [NISubtitleCellObject objectWithTitle:@"Extra Actions"
                                    subtitle:@"Subclassing for more actions"]],
 

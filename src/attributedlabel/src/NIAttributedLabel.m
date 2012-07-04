@@ -20,20 +20,33 @@
 #import "NSMutableAttributedString+NimbusAttributedLabel.h"
 #import <QuartzCore/QuartzCore.h>
 
-@interface NIAttributedLabel()
+static const NSTimeInterval kLongPressTimeInterval = 0.5;
+static const CGFloat kLongPressGutter = 22;
+static UIEdgeInsets kBoundsInsets = {-5, -5, -5, -5};
+
+@interface NIAttributedLabel() <UIActionSheetDelegate>
 @property (nonatomic, readwrite, retain) NSMutableAttributedString* mutableAttributedString;
 @property (nonatomic, readwrite, assign) CTFrameRef textFrame;
 @property (readwrite, assign) BOOL detectingLinks; // Atomic.
 @property (nonatomic, readwrite, assign) BOOL linksHaveBeenDetected;
 @property (nonatomic, readwrite, copy) NSArray* detectedlinkLocations;
 @property (nonatomic, readwrite, retain) NSMutableArray* explicitLinkLocations;
+@property (nonatomic, readwrite, retain) NSTextCheckingResult* originalLink;
 @property (nonatomic, readwrite, retain) NSTextCheckingResult* touchedLink;
+@property (nonatomic, readwrite, retain) NSTimer* longPressTimer;
+@property (nonatomic, readwrite, assign) CGPoint touchPoint;
+@property (nonatomic, readwrite, retain) NSTextCheckingResult* actionSheetLink;
 @end
 
 
 @interface NIAttributedLabel(ConversionUtilities)
+#if __IPHONE_OS_VERSION_MIN_REQUIRED < NIIOS_6_0
 + (CTTextAlignment)alignmentFromUITextAlignment:(UITextAlignment)alignment;
 + (CTLineBreakMode)lineBreakModeFromUILineBreakMode:(UILineBreakMode)lineBreakMode;
+#else
++ (CTTextAlignment)alignmentFromUITextAlignment:(NSTextAlignment)alignment;
++ (CTLineBreakMode)lineBreakModeFromUILineBreakMode:(NSLineBreakMode)lineBreakMode;
+#endif
 + (NSMutableAttributedString *)mutableAttributedStringFromLabel:(UILabel *)label;
 @end
 
@@ -49,7 +62,11 @@
 @synthesize linksHaveBeenDetected = _linksHaveBeenDetected;
 @synthesize detectedlinkLocations = _detectedlinkLocations;
 @synthesize explicitLinkLocations = _explicitLinkLocations;
+@synthesize originalLink = _originalLink;
 @synthesize touchedLink = _touchedLink;
+@synthesize longPressTimer = _longPressTimer;
+@synthesize touchPoint = _touchPoint;
+@synthesize actionSheetLink = _actionSheetLink;
 @synthesize autoDetectLinks = _autoDetectLinks;
 @synthesize deferLinkDetection = _deferLinkDetection;
 @synthesize dataDetectorTypes = _dataDetectorTypes;
@@ -61,7 +78,7 @@
 @synthesize strokeColor = _strokeColor;
 @synthesize textKern = _textKern;
 @synthesize linkColor = _linkColor;
-@synthesize highlightedLinkColor = _highlightedLinkColor;
+@synthesize highlightedLinkBackgroundColor = _highlightedLinkBackgroundColor;
 @synthesize linksHaveUnderlines = _linksHaveUnderlines;
 @synthesize attributesForLinks = _attributesForLinks;
 @synthesize delegate = _delegate;
@@ -69,6 +86,8 @@
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 - (void)dealloc {
+  [_longPressTimer invalidate];
+
   if (nil != _textFrame) {
     CFRelease(_textFrame);
   }
@@ -80,7 +99,7 @@
   self.verticalTextAlignment = NIVerticalTextAlignmentTop;
   self.linkColor = [UIColor blueColor];
   self.dataDetectorTypes = NSTextCheckingTypeLink;
-  self.highlightedLinkColor = [UIColor colorWithWhite:0.5f alpha:0.5f];
+  self.highlightedLinkBackgroundColor = [UIColor colorWithWhite:0.5f alpha:0.5f];
 }
 
 
@@ -99,7 +118,12 @@
   
   [self _configureDefaults];
 
-  self.attributedString = [self.class mutableAttributedStringFromLabel:self];
+  NSMutableAttributedString* attributedText = [[self class] mutableAttributedStringFromLabel:self];
+#if __IPHONE_OS_VERSION_MIN_REQUIRED < NIIOS_6_0
+  self.attributedString = attributedText;
+#else
+  self.attributedText = attributedText;
+#endif
 }
 
 
@@ -134,8 +158,10 @@
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 - (void)setBounds:(CGRect)bounds {
-  BOOL boundsDidChange = !CGRectEqualToRect(self.bounds, bounds);
+  bounds = UIEdgeInsetsInsetRect(bounds, kBoundsInsets);
 
+  BOOL boundsDidChange = !CGRectEqualToRect(self.bounds, bounds);
+  
   [super setBounds:bounds];
 
   if (boundsDidChange) {
@@ -173,32 +199,60 @@
 - (void)setText:(NSString *)text {
   [super setText:text];
 
-  self.attributedString = [self.class mutableAttributedStringFromLabel:self];
+  NSMutableAttributedString* attributedText = [[self class] mutableAttributedStringFromLabel:self];
+#if __IPHONE_OS_VERSION_MIN_REQUIRED < NIIOS_6_0
+  self.attributedString = attributedText;
+#else
+  self.attributedText = attributedText;
+#endif
 }
 
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
+// Deprecated method.
 - (NSAttributedString *)attributedString {
-  if (nil == self.mutableAttributedString) {
-    self.attributedString = [self.class mutableAttributedStringFromLabel:self];
-  }
   return [self.mutableAttributedString copy];
 }
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+#if __IPHONE_OS_VERSION_MAX_ALLOWED >= NIIOS_6_0
+- (NSAttributedString *)attributedText {
+  return [self.mutableAttributedString copy];
+}
+#endif
 
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 - (void)setAttributedString:(NSAttributedString *)attributedText {
   if (self.mutableAttributedString != attributedText) {
     self.mutableAttributedString = [attributedText mutableCopy];
-
+    
     // Clear the link caches.
     self.detectedlinkLocations = nil;
     self.linksHaveBeenDetected = NO;
     [self removeAllExplicitLinks];
-
+    
     [self attributedTextDidChange];
   }
 }
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+#if __IPHONE_OS_VERSION_MAX_ALLOWED >= NIIOS_6_0
+- (void)setAttributedText:(NSAttributedString *)attributedText {
+  if (self.mutableAttributedString != attributedText) {
+    self.mutableAttributedString = [attributedText mutableCopy];
+    
+    // Clear the link caches.
+    self.detectedlinkLocations = nil;
+    self.linksHaveBeenDetected = NO;
+    [self removeAllExplicitLinks];
+    
+    [self attributedTextDidChange];
+  }
+}
+#endif
 
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -231,20 +285,40 @@
 
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
+#if __IPHONE_OS_VERSION_MIN_REQUIRED < NIIOS_6_0
 - (void)setTextAlignment:(UITextAlignment)textAlignment {
   // We assume that the UILabel implementation will call setNeedsDisplay. Where we don't call super
   // we call setNeedsDisplay ourselves.
   [super setTextAlignment:textAlignment];
-
+  
   if (nil != self.mutableAttributedString) {
     CTTextAlignment alignment = [self.class alignmentFromUITextAlignment:textAlignment];
     CTLineBreakMode lineBreak = [self.class lineBreakModeFromUILineBreakMode:self.lineBreakMode];
     [self.mutableAttributedString setTextAlignment:alignment lineBreakMode:lineBreak];
   }
 }
+#else
+- (void)setTextAlignment:(NSTextAlignment)textAlignment {
+  // We assume that the UILabel implementation will call setNeedsDisplay. Where we don't call super
+  // we call setNeedsDisplay ourselves.
+  if (NSTextAlignmentJustified == textAlignment) {
+    // iOS 6.0 Beta 2 crashes when using justified text alignments for some reason.
+    [super setTextAlignment:NSTextAlignmentLeft];
+  } else {
+    [super setTextAlignment:textAlignment];
+  }
+  
+  if (nil != self.mutableAttributedString) {
+    CTTextAlignment alignment = [self.class alignmentFromUITextAlignment:textAlignment];
+    CTLineBreakMode lineBreak = [self.class lineBreakModeFromUILineBreakMode:self.lineBreakMode];
+    [self.mutableAttributedString setTextAlignment:alignment lineBreakMode:lineBreak];
+  }
+}
+#endif
 
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
+#if __IPHONE_OS_VERSION_MIN_REQUIRED < NIIOS_6_0
 - (void)setLineBreakMode:(UILineBreakMode)lineBreakMode {
   [super setLineBreakMode:lineBreakMode];
 
@@ -254,6 +328,17 @@
     [self.mutableAttributedString setTextAlignment:alignment lineBreakMode:lineBreak];
   }
 }
+#else
+- (void)setLineBreakMode:(NSLineBreakMode)lineBreakMode {
+  [super setLineBreakMode:lineBreakMode];
+  
+  if (nil != self.mutableAttributedString) {
+    CTTextAlignment alignment = [self.class alignmentFromUITextAlignment:self.textAlignment];
+    CTLineBreakMode lineBreak = [self.class lineBreakModeFromUILineBreakMode:lineBreakMode];
+    [self.mutableAttributedString setTextAlignment:alignment lineBreakMode:lineBreak];
+  }
+}
+#endif
 
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -307,6 +392,7 @@
     [self attributedTextDidChange];
   }
 }
+
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 - (void)setUnderlineStyle:(CTUnderlineStyle)style modifier:(CTUnderlineStyleModifiers)modifier range:(NSRange)range {
@@ -384,9 +470,9 @@
 
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
-- (void)setHighlightedLinkColor:(UIColor *)highlightedLinkColor {
-  if (_highlightedLinkColor != highlightedLinkColor) {
-    _highlightedLinkColor = highlightedLinkColor;
+- (void)sethighlightedLinkBackgroundColor:(UIColor *)highlightedLinkBackgroundColor {
+  if (_highlightedLinkBackgroundColor != highlightedLinkBackgroundColor) {
+    _highlightedLinkBackgroundColor = highlightedLinkBackgroundColor;
 
     [self attributedTextDidChange];
   }
@@ -397,6 +483,16 @@
 - (void)setLinksHaveUnderlines:(BOOL)linksHaveUnderlines {
   if (_linksHaveUnderlines != linksHaveUnderlines) {
     _linksHaveUnderlines = linksHaveUnderlines;
+
+    [self attributedTextDidChange];
+  }
+}
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+- (void)setAttributesForLinks:(NSDictionary *)attributesForLinks {
+  if (_attributesForLinks != attributesForLinks) {
+    _attributesForLinks = attributesForLinks;
 
     [self attributedTextDidChange];
   }
@@ -541,6 +637,11 @@
   CGAffineTransform transform = [self _transformForCoreText];
   CGFloat verticalOffset = [self _verticalOffsetForBounds:self.bounds];
 
+  // Our bounds may have a non-zero offset, so we must take this into account when doing hit
+  // detection.
+  point.x += kBoundsInsets.left;
+  point.y -= kBoundsInsets.top;
+
   for (int i = 0; i < count; i++) {
 		CGPoint linePoint = origins[i];
 
@@ -573,14 +674,63 @@
 	CGPoint point = [touch locationInView:self];
 
   self.touchedLink = [self linkAtPoint:point];
+  self.touchPoint = point;
+  self.originalLink = self.touchedLink;
+
+  [self.longPressTimer invalidate];
+  if (nil != self.touchedLink) {
+    self.longPressTimer = [NSTimer scheduledTimerWithTimeInterval:kLongPressTimeInterval target:self selector:@selector(_longPressTimerDidFire:) userInfo:nil repeats:NO];
+  }
 
   [self setNeedsDisplay];
 }
 
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
+- (void)touchesMoved:(NSSet *)touches withEvent:(UIEvent *)event {
+  [super touchesMoved:touches withEvent:event];
+  
+  UITouch* touch = [touches anyObject];
+	CGPoint point = [touch locationInView:self];
+
+  // If the user moves their finger away from the original link, deselect it.
+  // If the user moves their finger back to the original link, reselect it.
+  // Don't allow other links to be selected other than the original link.
+  NSTextCheckingResult* newLink = [self linkAtPoint:point];
+  if (newLink != self.touchedLink) {
+    if (newLink != self.originalLink) {
+      [self.longPressTimer invalidate];
+      self.longPressTimer = nil;
+      self.touchedLink = nil;
+      [self setNeedsDisplay];
+
+    } else {
+      self.touchedLink = self.originalLink;
+      [self setNeedsDisplay];
+    }
+  }
+
+  // If the user moves their finger within the link beyond a certain gutter amount, reset the
+  // hold timer. The user must hold their finger still for the long press interval in order for
+  // the long press action to fire.
+  if (fabsf(self.touchPoint.x - point.x) >= kLongPressGutter
+      || fabsf(self.touchPoint.y - point.y) >= kLongPressGutter) {
+    [self.longPressTimer invalidate];
+    self.longPressTimer = nil;
+    if (nil != self.touchedLink) {
+      self.longPressTimer = [NSTimer scheduledTimerWithTimeInterval:kLongPressTimeInterval target:self selector:@selector(_longPressTimerDidFire:) userInfo:nil repeats:NO];
+      self.touchPoint = point;
+    }
+  }
+}
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
 - (void)touchesEnded:(NSSet *)touches withEvent:(UIEvent *)event {
   [super touchesEnded:touches withEvent:event];
+
+  [self.longPressTimer invalidate];
+  self.longPressTimer = nil;
 
   UITouch* touch = [touches anyObject];
 	CGPoint point = [touch locationInView:self];
@@ -605,10 +755,89 @@
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 - (void)touchesCancelled:(NSSet *)touches withEvent:(UIEvent *)event {
   [super touchesCancelled:touches withEvent:event];
+  
+  [self.longPressTimer invalidate];
+  self.longPressTimer = nil;
 
   self.touchedLink = nil;
 
   [self setNeedsDisplay];
+}
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+- (UIActionSheet *)actionSheetForResult:(NSTextCheckingResult *)result {
+  UIActionSheet* actionSheet =
+  [[UIActionSheet alloc] initWithTitle:nil
+                              delegate:self
+                     cancelButtonTitle:nil
+                destructiveButtonTitle:nil
+                     otherButtonTitles:nil];
+
+  NSString* title = nil;
+  if (NSTextCheckingTypeLink == result.resultType) {
+    if ([result.URL.scheme isEqualToString:@"mailto"]) {
+      title = result.URL.resourceSpecifier;
+      [actionSheet addButtonWithTitle:NSLocalizedString(@"Open in Mail", @"")];
+      [actionSheet addButtonWithTitle:NSLocalizedString(@"Copy Email Address", @"")];
+
+    } else {
+      title = result.URL.absoluteString;
+      [actionSheet addButtonWithTitle:NSLocalizedString(@"Open in Safari", @"")];
+      [actionSheet addButtonWithTitle:NSLocalizedString(@"Copy URL", @"")];
+    }
+
+  } else if (NSTextCheckingTypePhoneNumber == result.resultType) {
+    title = result.phoneNumber;
+    [actionSheet addButtonWithTitle:NSLocalizedString(@"Call", @"")];
+    [actionSheet addButtonWithTitle:NSLocalizedString(@"Copy Phone Number", @"")];
+
+  } else if (NSTextCheckingTypeAddress == result.resultType) {
+    title = [self.mutableAttributedString.string substringWithRange:self.actionSheetLink.range];
+    [actionSheet addButtonWithTitle:NSLocalizedString(@"Open in Maps", @"")];
+    [actionSheet addButtonWithTitle:NSLocalizedString(@"Copy Address", @"")];
+
+  } else {
+    // This type has not been implemented yet.
+    NIDASSERT(NO);
+    [actionSheet addButtonWithTitle:NSLocalizedString(@"Copy", @"")];
+  }
+  actionSheet.title = title;
+
+  if (!NIIsPad()) {
+    [actionSheet setCancelButtonIndex:[actionSheet addButtonWithTitle:NSLocalizedString(@"Cancel", @"")]];
+  }
+
+  return actionSheet;
+}
+
+  
+///////////////////////////////////////////////////////////////////////////////////////////////////
+- (void)_longPressTimerDidFire:(NSTimer *)timer {
+  self.longPressTimer = nil;
+
+  if (nil != self.touchedLink) {
+    self.actionSheetLink = self.touchedLink;
+
+    UIActionSheet* actionSheet = [self actionSheetForResult:self.actionSheetLink];
+
+    BOOL shouldPresent = YES;
+    if ([self.delegate respondsToSelector:@selector(attributedLabel:shouldPresentActionSheet:withTextCheckingResult:atPoint:)]) {
+      // Give the delegate the opportunity to not show the action sheet or to present their own.
+      shouldPresent = [self.delegate attributedLabel:self shouldPresentActionSheet:actionSheet withTextCheckingResult:self.touchedLink atPoint:self.touchPoint];
+    }
+
+    if (shouldPresent) {
+      if (NIIsPad()) {
+        [actionSheet showFromRect:CGRectMake(self.touchPoint.x - 22, self.touchPoint.y - 22, 44, 44) inView:self animated:YES];
+      } else {
+        [actionSheet showInView:self];
+      }
+
+    } else {
+      self.actionSheetLink = nil;
+    }
+  }
 }
 
 
@@ -635,7 +864,7 @@
 // makes it possible to turn off links or remove them altogether without losing the existing
 // style information.
 - (NSMutableAttributedString *)mutableAttributedStringWithLinkStylesApplied {
-  NSMutableAttributedString* attributedString = [self.attributedString mutableCopy];
+  NSMutableAttributedString* attributedString = [self.mutableAttributedString mutableCopy];
   if (self.autoDetectLinks) {
     [self _applyLinkStyleWithResults:self.detectedlinkLocations
                   toAttributedString:attributedString];
@@ -650,6 +879,8 @@
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 - (void)drawTextInRect:(CGRect)rect {
+  rect = UIEdgeInsetsInsetRect(rect, UIEdgeInsetsMake(-kBoundsInsets.top, -kBoundsInsets.left, -kBoundsInsets.bottom, -kBoundsInsets.right));
+
   if (NIVerticalTextAlignmentTop != self.verticalTextAlignment) {
     rect.origin.y = [self _verticalOffsetForBounds:rect];
   }
@@ -687,10 +918,10 @@
     }
 
     // Draw the tapped link's highlight.
-    if (nil != self.touchedLink && nil != self.highlightedLinkColor) {
-      [self.highlightedLinkColor setFill];
+    if ((nil != self.touchedLink || nil != self.actionSheetLink) && nil != self.highlightedLinkBackgroundColor) {
+      [self.highlightedLinkBackgroundColor setFill];
 
-      NSRange linkRange = self.touchedLink.range;
+      NSRange linkRange = nil != self.touchedLink ? self.touchedLink.range : self.actionSheetLink.range;
 
       CFArrayRef lines = CTFrameGetLines(self.textFrame);
       CFIndex count = CFArrayGetCount(lines);
@@ -743,7 +974,7 @@
                                        height);
 
           linkRect = CGRectIntegral(linkRect);
-          linkRect = CGRectInset(linkRect, -2, -1);
+          linkRect = CGRectInset(linkRect, -2, 0);
 
           if (CGRectIsEmpty(highlightRect)) {
             highlightRect = linkRect;
@@ -754,7 +985,7 @@
         }
 
         if (!CGRectIsEmpty(highlightRect)) {
-          highlightRect = CGRectOffset(highlightRect, 0, -rect.origin.y);
+          highlightRect = CGRectOffset(highlightRect, -kBoundsInsets.left, -rect.origin.y - kBoundsInsets.top - kBoundsInsets.bottom);
 
           CGFloat pi = (CGFloat)M_PI;
 
@@ -787,6 +1018,63 @@
 }
 
 
+///////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////
+#pragma mark - UIActionSheetDelegate
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+- (void)actionSheet:(UIActionSheet*)actionSheet clickedButtonAtIndex:(NSInteger)buttonIndex {
+  if (NSTextCheckingTypeLink == self.actionSheetLink.resultType) {
+    if (buttonIndex == 0) {
+      [[UIApplication sharedApplication] openURL:self.actionSheetLink.URL];
+
+    } else if (buttonIndex == 1) {
+      if ([self.actionSheetLink.URL.scheme isEqualToString:@"mailto"]) {
+        [[UIPasteboard generalPasteboard] setString:self.actionSheetLink.URL.resourceSpecifier];
+
+      } else {
+        [[UIPasteboard generalPasteboard] setURL:self.actionSheetLink.URL];
+      }
+    }
+
+  } else if (NSTextCheckingTypePhoneNumber == self.actionSheetLink.resultType) {
+    if (buttonIndex == 0) {
+      [[UIApplication sharedApplication] openURL:[NSURL URLWithString:[@"tel:" stringByAppendingString:self.actionSheetLink.phoneNumber]]];
+
+    } else if (buttonIndex == 1) {
+      [[UIPasteboard generalPasteboard] setString:self.actionSheetLink.phoneNumber];
+    }
+
+  } else if (NSTextCheckingTypeAddress == self.actionSheetLink.resultType) {
+    NSString* address = [self.mutableAttributedString.string substringWithRange:self.actionSheetLink.range];
+    if (buttonIndex == 0) {
+      [[UIApplication sharedApplication] openURL:[NSURL URLWithString:[[@"http://maps.google.com/maps?q=" stringByAppendingString:address] stringByAddingPercentEscapesUsingEncoding:NSUTF8StringEncoding]]];
+      
+    } else if (buttonIndex == 1) {
+      [[UIPasteboard generalPasteboard] setString:address];
+    }
+
+  } else {
+    // Unsupported data type only allows the user to copy.
+    if (buttonIndex == 0) {
+      NSString* text = [self.mutableAttributedString.string substringWithRange:self.actionSheetLink.range];
+      [[UIPasteboard generalPasteboard] setString:text];
+    }
+  }
+
+  self.actionSheetLink = nil;
+  [self setNeedsDisplay];
+}
+
+  
+///////////////////////////////////////////////////////////////////////////////////////////////////
+- (void)actionSheetCancel:(UIActionSheet *)actionSheet {
+  self.actionSheetLink = nil;
+  [self setNeedsDisplay];
+}
+
+
 @end
 
 
@@ -797,18 +1085,31 @@
 
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
+#if __IPHONE_OS_VERSION_MIN_REQUIRED < NIIOS_6_0
 + (CTTextAlignment)alignmentFromUITextAlignment:(UITextAlignment)alignment {
   switch (alignment) {
 		case UITextAlignmentLeft: return kCTLeftTextAlignment;
 		case UITextAlignmentCenter: return kCTCenterTextAlignment;
 		case UITextAlignmentRight: return kCTRightTextAlignment;
-		case UITextAlignmentJustify: return kCTJustifiedTextAlignment; 		
+		case UITextAlignmentJustify: return kCTJustifiedTextAlignment;
     default: return kCTNaturalTextAlignment;
 	}
 }
+#else
++ (CTTextAlignment)alignmentFromUITextAlignment:(NSTextAlignment)alignment {
+  switch (alignment) {
+    case NSTextAlignmentLeft: return kCTLeftTextAlignment;
+    case NSTextAlignmentCenter: return kCTCenterTextAlignment;
+    case NSTextAlignmentRight: return kCTRightTextAlignment;
+    case NSTextAlignmentJustified: return kCTJustifiedTextAlignment;
+    default: return kCTNaturalTextAlignment;
+	}
+}
+#endif
 
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
+#if __IPHONE_OS_VERSION_MIN_REQUIRED < NIIOS_6_0
 + (CTLineBreakMode)lineBreakModeFromUILineBreakMode:(UILineBreakMode)lineBreakMode {
 	switch (lineBreakMode) {
 		case UILineBreakModeWordWrap: return kCTLineBreakByWordWrapping;
@@ -820,24 +1121,37 @@
 		default: return 0;
 	}
 }
+#else
++ (CTLineBreakMode)lineBreakModeFromUILineBreakMode:(NSLineBreakMode)lineBreakMode {
+  switch (lineBreakMode) {
+    case NSLineBreakByWordWrapping: return kCTLineBreakByWordWrapping;
+    case NSLineBreakByCharWrapping: return kCTLineBreakByCharWrapping;
+    case NSLineBreakByClipping: return kCTLineBreakByClipping;
+    case NSLineBreakByTruncatingHead: return kCTLineBreakByTruncatingHead;
+    case NSLineBreakByTruncatingTail: return kCTLineBreakByTruncatingTail;
+    case NSLineBreakByTruncatingMiddle: return kCTLineBreakByTruncatingMiddle;
+    default: return 0;
+  }
+}
+#endif
 
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 + (NSMutableAttributedString *)mutableAttributedStringFromLabel:(UILabel *)label {
   NSMutableAttributedString* attributedString = nil;
-  
+
   if (NIIsStringWithAnyText(label.text)) {
     attributedString = [[NSMutableAttributedString alloc] initWithString:label.text];
-    
+
     [attributedString setFont:label.font];
     [attributedString setTextColor:label.textColor];
-    
+
     CTTextAlignment textAlignment = [self alignmentFromUITextAlignment:label.textAlignment];
     CTLineBreakMode lineBreak = [self lineBreakModeFromUILineBreakMode:label.lineBreakMode];
-    
+
     [attributedString setTextAlignment:textAlignment lineBreakMode:lineBreak]; 
   }
-  
+
   return attributedString;
 }
 

@@ -1,7 +1,5 @@
 //
-// Copyright 2011 Jeff Verkoeyen
-//
-// Forked from Three20 June 10, 2011 - Copyright 2009-2011 Facebook
+// Copyright 2011-2012 Jeff Verkoeyen
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,51 +14,62 @@
 // limitations under the License.
 //
 
-#import "NILauncherViewController.h"
+#import "NILauncherViewObject.h"
+#import "NILauncherButtonView.h"
 
-#import "NimbusCore.h"
+static NSString* const kTitleCodingKey = @"title";
+static NSString* const kImageCodingKey = @"image";
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////
+@implementation NILauncherViewObject
+
+@synthesize title = _title;
+@synthesize image = _image;
 
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
-///////////////////////////////////////////////////////////////////////////////////////////////////
-///////////////////////////////////////////////////////////////////////////////////////////////////
-@implementation NILauncherItemDetails
-
-@synthesize title     = _title;
-@synthesize imagePath = _imagePath;
-
-
-///////////////////////////////////////////////////////////////////////////////////////////////////
-- (id)initWithTitle:(NSString *)title imagePath:(NSString *)imagePath {
+- (id)initWithTitle:(NSString *)title image:(UIImage *)image {
   if ((self = [super init])) {
-    _title = [title copy];
-    _imagePath = [imagePath copy];
+    _title = title;
+    _image = image;
   }
   return self;
 }
 
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
-+ (id)itemDetailsWithTitle:(NSString *)title imagePath:(NSString *)imagePath {
-  return [[NILauncherItemDetails alloc] initWithTitle: title
-                                             imagePath: imagePath];
++ (id)objectWithTitle:(NSString *)title image:(UIImage *)image {
+  return [[self alloc] initWithTitle:title image:image];
+}
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+- (Class)buttonViewClass {
+  return [NILauncherButtonView class];
+}
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////
+#pragma mark NSCoding
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+- (void)encodeWithCoder:(NSCoder *)coder {
+  [coder encodeObject:self.title forKey:kTitleCodingKey];
+  [coder encodeObject:self.image forKey:kImageCodingKey];
 }
 
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 - (id)initWithCoder:(NSCoder *)decoder {
-  if ((self = [self initWithTitle:nil imagePath:nil])) {
-    self.title = [decoder decodeObjectForKey:@"title"];
-    self.imagePath = [decoder decodeObjectForKey:@"imagePath"];
+  if ((self = [super init])) {
+    _title = [decoder decodeObjectForKey:kTitleCodingKey];
+    _image = [decoder decodeObjectForKey:kImageCodingKey];
   }
   return self;
-}
-
-
-///////////////////////////////////////////////////////////////////////////////////////////////////
-- (void)encodeWithCoder:(NSCoder *)encoder {
-  [encoder encodeObject:self.title forKey:@"title"];
-  [encoder encodeObject:self.imagePath forKey:@"imagePath"];
 }
 
 

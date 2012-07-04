@@ -1,5 +1,5 @@
 //
-// Copyright 2011 Jeff Verkoeyen
+// Copyright 2011-2012 Jeff Verkoeyen
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,13 +16,7 @@
 
 #import <UIKit/UIKit.h>
 
-@interface AppDelegate : NSObject <UIApplicationDelegate> {
-  UIWindow* _window;
-
-  UINavigationController* _rootController;
-}
-
-@property (nonatomic, readwrite, retain) UIWindow* window;
+// All docs are in the .m.
+@interface LongTapAttributedLabelViewController : UIViewController
 
 @end
-
