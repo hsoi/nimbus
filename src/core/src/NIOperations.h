@@ -17,7 +17,10 @@
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
 
-#import "NIBlocks.h"
+@class NIOperation;
+
+typedef void (^NIOperationBlock)(NIOperation* operation);
+typedef void (^NIOperationDidFailBlock)(NIOperation* operation, NSError* error);
 
 /**
  * For writing code that runs concurrently.
@@ -45,18 +48,14 @@
  */
 @interface NIOperation : NSOperation
 
-@property (atomic, readwrite, assign) id<NIOperationDelegate> delegate;
-@property (atomic, readonly, retain) NSError* lastError;
-@property (atomic, readwrite, assign) NSInteger tag;
+@property (readwrite, assign) id<NIOperationDelegate> delegate;
+@property (readonly, retain) NSError* lastError;
+@property (readwrite, assign) NSInteger tag;
 
-#if NS_BLOCKS_AVAILABLE
-
-@property (atomic, readwrite, copy) NIBasicBlock didStartBlock;
-@property (atomic, readwrite, copy) NIBasicBlock didFinishBlock;
-@property (atomic, readwrite, copy) NIErrorBlock didFailWithErrorBlock;
-@property (atomic, readwrite, copy) NIBasicBlock willFinishBlock;
-
-#endif // #if NS_BLOCKS_AVAILABLE
+@property (readwrite, copy) NIOperationBlock didStartBlock;
+@property (readwrite, copy) NIOperationBlock didFinishBlock;
+@property (readwrite, copy) NIOperationDidFailBlock didFailWithErrorBlock;
+@property (readwrite, copy) NIOperationBlock willFinishBlock;
 
 - (void)didStart;
 - (void)didFinish;
@@ -136,7 +135,6 @@
  */
 
 
-#if NS_BLOCKS_AVAILABLE
 /** @name Blocks */
 
 /**
@@ -176,7 +174,6 @@
  *
  *      @fn NIOperation::willFinishBlock
  */
-#endif // #if NS_BLOCKS_AVAILABLE
 
 
 /**
